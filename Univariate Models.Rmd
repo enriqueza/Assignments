@@ -1,0 +1,185 @@
+---
+title: "Assignment_Univariate"
+author: "Alejandra"
+date: "January 31, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Fir Trees
+```{r}
+trees = read.csv('./treedata_subset.csv')
+#First I plotted all the data to get a better look
+plot(trees)
+fir = subset(trees, trees$species == 'Abies fraseri')
+
+#correlations
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor=3, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) 
+        cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor)
+}
+pairs(fir)
+pairs(~streamdist+elev+tci+disturb+beers+cover,lower.panel = panel.smooth, upper.panel = panel.cor, data = fir)#it appears streamdist and elev have a strong relationship, as does cover and elev. beers and tci also appear to have strong correlations
+
+#Since streamdist and elev seem to have a relationship, I plotted a few variables I thought were influenctial.
+library(ggplot2)
+stream_plot <- ggplot(data = fir, 
+             mapping = aes(x = fir$streamdist, y = fir$cover)) + 
+      geom_point() + 
+      geom_smooth(method = 'lm') + 
+      labs(x = 'streamdist', y = 'fircover')
+stream_plot
+
+elev_plot <- ggplot(data = fir, 
+             mapping = aes(x = fir$elev, y = fir$cover)) + 
+      geom_point() + 
+      geom_smooth(method = 'lm') + 
+      labs(x = 'elevation', y = 'fircover')
+elev_plot
+
+plot(fir$elev~fir$streamdist)
+
+#there might also be a relationshp between elevation and stream distance.
+
+all_var_fir_mod = lm(fir$cover~fir$elev+fir$tci+fir$streamdist+fir$disturb+fir$beers)#this includes all the variables
+summary(all_var_firmod)
+library(car)
+Anova(all_var_fir_mod, type=3)
+#the anova p-values and the sumary function p-values are pretty much the same except for the disturb variable, which was spearated with the summary() function
+
+all_intrxn_fir_mod = update(all_var_firmod, ~ . +elev*tci*streamdist*disturb*beers, data= fir)
+summary(all_intrxn_fir_mod)
+library(MASS)
+stepAIC(all_intrxn_fir_mod)
+#using AIC, the best model included many interactions:
+best_intrxn_model = lm(formula = fir$cover ~ elev + tci + streamdist + beers + elev:tci + 
+    elev:streamdist + tci:streamdist + elev:beers + tci:beers + 
+    streamdist:beers + elev:tci:beers + tci:streamdist:beers, 
+    data = fir)
+#However, I already found that the interaction between elevaton and elev should be high, and there are far too many variables to be able to explain what is going on, so I tried a different model with these interactions.
+
+updated_fir_mod =lm(formula = cover ~ elev*streamdist*disturb, data = fir)
+stepAIC(updated_fir_mod)
+
+updated_fir_mod2 = lm(cover ~ elev + disturb + elev:disturb, data = fir)
+summary(updated_fir_mod2)
+AIC(updated_fir_mod2)
+#AIC is better with this model, but it apears ony elev might have a significant effect, and that there is perfect colinearity between some of these variables (violation of OLS). Furthermore, I know from before that stream distance displayed and interaction with elevation, so I will compare another model. 
+
+updated_fir_mod3 =lm(cover ~ elev + streamdist + elev:streamdist, data = fir)
+AIC(updated_fir_mod3)
+#AIC is better with this model
+Anova(updated_fir_mod3, type = 3)
+summary(updated_fir_mod3)
+#this is the best model
+
+plot(updated_fir_mod3)#data seems a bit away from normal distribution, but there appears to be homoscadisticity
+shapiro.test(residuals(updated_fir_mod3))#residuals indicate that this data is normal
+```
+Maple
+```{r}
+
+red_maple = trees[trees$species == 'Acer rubrum',]
+all_var_maplemod = lm(cover~elev+tci+streamdist+disturb+beers, data = red_maple)#this model has all the main variables excluding ID
+summary(all_var_maplemod)
+Anova(all_var_maplemod, type = 3)
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor=3, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- abs(cor(x, y))
+    txt <- format(c(r, 0.123456789), digits = digits)[1]
+    txt <- paste0(prefix, txt)
+    if(missing(cex.cor)) 
+        cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor)
+}
+pairs(red_maple)
+pairs(~streamdist+elev+tci+disturb+beers+cover,lower.panel = panel.smooth, upper.panel = panel.cor, data = red_maple)#there appears to be a relationship between streamdist and elevation, as well as elevation and tci and elev and beers
+
+all_var_map_mod = lm(cover~elev+tci+streamdist+disturb+beers, data = red_maple)# this has a very low r squared value
+summary(all_var_map_mod)
+Anova(all_var_map_mod)#looks like elev, streamdist, and beers have a significant effect
+all_intrxn_map_mod = update(all_var_firmod, ~ . +elev*tci*streamdist*disturb*beers, data= red_maple)
+summary(all_intrxn_map_mod)
+anova(all_intrxn_map_mod)
+#it looks like with the anova, this model gets a lot more significant variables. However, it is really complex and has a low r squared, so I will write a simpler one.
+stepAIC(all_intrxn_map_mod)#this found the best model, but there are many variables here.
+summary(lm(formula = cover ~ elev + tci + streamdist + disturb + beers + 
+    elev:tci + elev:streamdist + tci:streamdist + elev:disturb + 
+    tci:disturb + streamdist:disturb + elev:beers + tci:beers + 
+    streamdist:beers + disturb:beers + elev:tci:streamdist + 
+    elev:streamdist:disturb + tci:streamdist:disturb + tci:streamdist:beers + 
+    tci:disturb:beers + streamdist:disturb:beers + tci:streamdist:disturb:beers, 
+    data = red_maple))
+Anova(lm(formula = cover ~ elev + tci + streamdist + disturb + beers + 
+    elev:tci + elev:streamdist + tci:streamdist + elev:disturb + 
+    tci:disturb + streamdist:disturb + elev:beers + tci:beers + 
+    streamdist:beers + disturb:beers + elev:tci:streamdist + 
+    elev:streamdist:disturb + tci:streamdist:disturb + tci:streamdist:beers + 
+    tci:disturb:beers + streamdist:disturb:beers + tci:streamdist:disturb:beers, 
+    data = red_maple))
+#this model has a better R-squared value, so it explains the variance better, however there are too many interactions to say anything specific
+
+updated_map_mod = lm(cover~elev*streamdist*tci*beers+disturb, data = red_maple)
+stepAIC(updated_map_mod)#it appears that disturb does not have a good place in the model, so I will leave it out
+best_aic_map_mod = (lm(formula = cover ~ elev + streamdist + tci + beers + elev:tci + 
+    streamdist:tci + elev:beers + streamdist:beers + tci:beers + 
+    streamdist:tci:beers, data = red_maple))
+AIC(best_aic_map_mod)#this has the best AIC so far
+anova(all_intrxn_map_mod,best_aic_map_mod)# a simple anova indicates that the updated model might be better to use
+
+Anova(best_aic_map_mod, type = 3)
+summary(best_aic_map_mod)
+#even though the adjusted r squared and multiple r squared values are less than the complete interaction model, this appears to make more sense.
+
+
+
+plot(best_aic_map_mod)#data appears normal, however residuals vs. fitted data seems to have a trend of some sort
+shapiro.test(residuals(best_aic_map_mod))# a closer inspection indicates that this data is not normal, which might affect AIC values since AIC is not very robust
+```
+1a. The explanatory model for Abies, 50% of the variance was explained by the model that I came up with, which included elevation and stream distance. This model had the best AIC value of 171.433. For Acer rubum, it appears that about 7% of the variance is explained by the model. It was quite difficult to get a good model fit and r-squared value.  
+""
+1b. For Abies, it appears that, while some variables like "disturb" might have had an effect on cover,the most important were 'elevation' and 'streamdist'. For Acer rubum, it appears ther is a significant influence of the interactions between elevation and other variables on cover, including tci and beers. elevation itself appears to be a significant variable in the model. 
+
+1c. For the model with Abies, initially it appeared that the data was not normalized, however a shapiro test revealed that the residuals are normally distributed and that even thought there are outliers, there is not a great effect on regression, and there seems to be homoscadisticity. For Acer rubum, further testing revealed that the residuals of the data were not normal, violating an assumption of the OLS.
+
+1d. It would probably be easier to explain variance in Abies, likely mainly due to the fact that it is a specialist, so certain specific variables/conditions would limit the cover of this species as opposed to Acer rubum.
+
+
+2. For Abies, the pseudo-r squared value was slightly higher than the R squared value of the linear model. Furthermore, the interaction between elevation and stream distance became significant.Interestingly, by changing the error distribution, the model better explained the degree of variaton (as given by the pseudo-R squared value of the Acer trees model.) However, the significance of the variables did not change.
+
+glm and poisson value
+```{r}
+acer_poi = glm(cover ~ elev + streamdist + tci + beers + elev:tci + 
+    streamdist:tci + elev:beers + streamdist:beers + tci:beers + 
+    streamdist:tci:beers, data = red_maple)
+acer_poi
+Anova(acer_poi, type = 3)
+abies_poi = glm(cover ~ elev + streamdist + elev:streamdist, data = fir, family='poisson')
+abies_poi
+pseudo_r2 = function(glm_mod) {
+                1 -  glm_mod$deviance / glm_mod$null.deviance
+}
+pseudo_r2(abies_poi)
+Anova(abies_poi, type = 3)#this changed the significance of the values
+pseudo_r2(acer_poi)
+
+
+abies_poi = glm(cover ~ elev + streamdist + elev:streamdist, data = fir)
+abies_poi
+pseudo_r2(abies_poi)
+```
+
+
+3. Abies species change with elevation, while Acer change with several variables and it is difficult to assess exaclty which ones directly influence them, likely because those fir trees are specialists, while maple tree species like Acer are generalists may not have as a narrow need for certain environmental factors in order to have a wider cover, and thus can be influenced by environmental factors that cover a wide area like water potential in combination with temperature gradients based on orientation (beers). What I thought was odd was that elevaton also significantly affected Acer, just as it did with Abies, which may imply that elevation has a greater role in determining tree cover. Red maple trees might be further influenced by factors not listed in the analysis as well.
