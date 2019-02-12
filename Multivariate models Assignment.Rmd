@@ -1,0 +1,55 @@
+---
+title: "Multivariate Assignment"
+author: "Alejandra"
+date: "February 11, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(vegan)
+data(dune)
+data(dune.env)
+
+dune_mds = metaMDS(dune)
+plot(dune_mds)
+orditorp(dune_mds,display="species",col="red",air=0.01)
+orditorp(dune_mds,display="sites",cex=1.25,air=0.01)
+#shows a graph of regions and species
+
+plot(dune_mds, type='n')
+ text(dune_mds, 'sp', cex=.5)
+ color_vect = rev(terrain.colors(6))[-1]
+ points(dune_mds, 'sites', pch=19, 
+        col=color_vect[dune.env$Moisture])#this plot includes moisture now plotted
+ legend('topright', paste("Moisture =", 1:5, sep=''), 
+        col=color_vect, pch=19)#NMDS1 has the greatest variance
+ orditorp(dune_mds,display="sites",cex=1.25,air=0.01)
+#this plot shows there may be a potential effect of moisture gradient on the data.
+```
+1. Since this is an unconstrained analysis, it gives you an idea of the bigger picture, and is not based on hypothesis testing. It appears that in areas of moisture level 1, 3, and 4, there are several types of Dune Vegetation that cluster in those areas. There is also a gradient occuring from drier in the far left of the axis (pink), to moderate (yellow), to higher levels of moisture (4). It appears that several species appear in drier environments, so it looks like moisture does seem to play a role.
+
+2.
+```{r}
+tree_cca = cca(dune~., data=dune.env)
+summary(tree_cca)#according to this cca, the biggest "biplot score" for this analysis in CCA1 is "Moisture.L", so that might be something to consider.
+tree_anova = anova(tree_cca)
+plot(tree_cca)
+RsquareAdj(tree_cca, 100)#r squared value rather high.
+plot(cca(dune,dune.env))
+
+plot(cca(dune~dune.env$Moisture))
+
+tree_anova_variables = anova(tree_cca, by='margin', permutations = 999)
+tree_anova_variables
+#it looks like none of the variables have a significant effect
+
+tree_cca_moist = cca(dune~dune.env$Moisture+dune.env$Manure)
+tree_cca_moist
+anova(tree_cca_moist, by='margin', permutations = 999)
+
+```
+3. As opposed to the NMDS, in the first anova that I did with the CCA, which included all variables, there was no significance from any of the variables, including Moisture. However, when I performed another anova with only the moisture and manure variables, moisture was indeed significant. Therefore, both analyses show that Moisture might indeed have an impact on the abundances of these trees in different regions(as evidenced by the f-statistic in the first anova analysis), but not to a significant degree when other factors are taken into consideration. I like using both methods, mainly because NMDS helps with visualization, while CCA gives you solid scores/values.
