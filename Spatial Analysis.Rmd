@@ -1,0 +1,123 @@
+---
+title: "Spatial Analysis Assignment"
+author: "Alejandra"
+date: "February 12, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(vegan)
+data(BCI)
+BCI
+## UTM Coordinates (in metres)
+BCI_xy = data.frame(x = rep(seq(625754, 626654, by=100), each=5), 
+                    y = rep(seq(1011569,  1011969, by=100), len=50))
+BCI_xy
+
+plot(BCI_xy)
+bci_hist_abun = apply(BCI, 2, sum)#this is for abundance by taking the sum and populating the matrix with the sums of those columns
+bci_hist_abun
+hist(bci_hist_abun)#Alseis.blackiana and Amaioua corymbosa (common vs. rare)
+colSums(BCI)#this is doing the same as bci_hist_abun
+
+
+
+common_spc = BCI$Alseis.blackiana
+rare_spc = BCI$Cavanillesia.platanifolia     
+
+
+  
+col_brks = hist(common_spc, plot=F)$breaks
+col_indices = as.numeric(cut(common_spc, col_brks))
+cols = rev(terrain.colors(length(col_brks)))
+plot(BCI_xy, cex=2, pch=19, col=cols[col_indices])#appears to be no spacial dependence
+
+col_brks = hist(rare_spc, plot=F)$breaks
+col_indices = as.numeric(cut(rare_spc, col_brks))
+cols = rev(terrain.colors(length(col_brks)))
+plot(BCI_xy, cex=2, pch=19, col=cols[col_indices])#appears to have some spacial dependence
+
+
+common_dist = dist(common_spc)
+xy_dist = dist(BCI_xy)
+rare_dist = dist(rare_spc)
+
+abun_mantel = mantel(xy_dist, common_dist)
+abun_mantel#not spacially dependent?
+
+abun_mantel2 = mantel(xy_dist, rare_dist)
+abun_mantel2
+
+```
+2. making a gls model 1
+```{r}
+
+colnames(BCI)[colnames(BCI)=="Drypetes.standleyi"]<-"dry"
+colnames(BCI)[colnames(BCI)=="Cordia.lasiocalyx"]<-"cordia"
+colnames(BCI)[colnames(BCI)=="Hirtella.triandra"]<-"hirtela"
+colnames(BCI)[colnames(BCI)=="Picramnia.latifolia"]<-"picra"
+colnames(BCI)[colnames(BCI)=="Quassia.amara"]<-"quasia"
+colnames(BCI)[colnames(BCI)=="Tabernaemontana.arborea"]<-"taberna"
+colnames(BCI)[colnames(BCI)=="Trattinnickia.aspera"]<-"trati"
+colnames(BCI)[colnames(BCI)=="Xylopia.macrantha"]<-"xylopia"
+#combine 2 data frames and make them into one
+matrix_BCI = data.frame(BCI, BCI_xy)
+
+library(nlme)
+simple_glsmod_1 = gls(dry~cordia,data=matrix_BCI)#model with a single variable
+summary(simple_glsmod_1)
+
+par(mfrow=c(1,1))
+plot(Variogram(simple_glsmod_1, form= ~ x + y),main="GLS dry~cordia")
+res_bci = residuals(simple_glsmod_1)
+#residual plot:
+plot(dist(matrix_BCI[, c('x', 'y')]), dist(res_bci),main="residuals from GLS dry~cordia")
+lines(lowess(dist(matrix_BCI[, c('x', 'y')]), dist(res_bci)), col='red', lwd=2)
+xy_dist_BCI=dist(BCI_xy)
+max_dist_BCI=max(xy_dist_BCI)
+abline(v = max_dist_BCI, col='red', lwd=3, lty=2)
+#updated the model with exponential error structure
+simple_exp_1 = update(simple_glsmod_1, corr=corExp(form=~x + y))
+# examine fit of error model to the raw model residuals
+plot(Variogram(simple_exp_1, maxDist = max_dist_BCI),main="GLS with exp for dry ~ cordia")#this doesn't fit very well.
+#it looks like there might be a nugget
+
+#now normalize residuals to see if anything is better
+plot(Variogram(simple_exp_1, resType='normalized', maxDist = max_dist_BCI),main="normalized residuals for GLS with exp for dry~cordia")
+
+simple_exp_nug_1 = update(simple_exp_1, corr=corExp(form=~x + y, nugget=T))
+plot(Variogram(simple_exp_nug_1, maxDist = max_dist_BCI),main="GLS with exp and nugget for dry~cordia")
+#fit is better with a nugget
+#residuals
+plot(Variogram(simple_exp_nug_1, resType='n', maxDist = max_dist_BCI), main="residuals for GLS with exp and nugget for dry~cordia")
+#now I can compare models
+anova(simple_glsmod_1, simple_exp_1, simple_exp_nug_1, test=F)
+#the exponential model seems to fit better
+summary(simple_exp_1)#cordia does not have effect on Drypetes standleyi with this model
+```
+2. making a gls model 2
+
+```{r}
+library(nlme)
+gls_mod_2a<-gls(dry~cordia+picra+quasia+hirtela+trati+taberna+xylopia,data=matrix_BCI)
+summary(gls_mod_2a)
+AIC(gls_mod_2a)#the AIC here is less than for model 1
+
+par(mfrow=c(1,1))
+plot(Variogram(gls_mod_2a, form= ~ x + y),main="GLS Model 2")
+#now update to add error term
+gls_exp_2a = update(gls_mod_2a, corr=corExp(form=~x + y))
+#plot it
+plot(Variogram(gls_exp_2a, maxDist = max_dist_BCI),main="GLS Model 2 Exp Added")#it doesn't quite fit
+#now plot the residuals normalized
+plot(Variogram(gls_exp_2a, resType='normalized', maxDist = max_dist_BCI),main="Normalized residuals for GLS Model 2 with Exp ")#this makes the fit better
+summary(gls_exp_2a)#xylopia no longer has a significant efffect on Drypetes standleyi, however
+#I will compare models with anova
+anova(gls_mod_2a,gls_exp_2a, test=F)#The AIC for the model with the spatial error term is better
+```
+Including the spatial error term did have an effect on both models, and that resulted in a change in the coefficients (as reflected by p-values and AIC values as well.) In the second model, Trattinnickia had a significant effect as a predictor variable only after the spatial errore term.  In both cases, the model fit became better when the spatial error term was added.  It appears that adding the spatial error term also had some ffect on the correlation coefficients shown in the summary for the second model, but not the first. Aside from that difference, the spatial error term affected both models in that it changed which coefficients were significant, likely due to the fact that there is spatial dependence in these species, including Cordia (which was the only expanatory variable in model 1).It could also have to do with the rarity of some of the species added in model 2; for example, Trati is low in abundance compared to some ofthe other species listed, which is why it may have been affected by adding the spatial error term and was given significance after that addition to model 2.
